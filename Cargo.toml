@@ -1,0 +1,12 @@
+[package]
+name = "moving-files"
+version = "0.1.0"
+description = "tui app for moving files from one folder to another"
+authors = ["AmpF5 <lolc44t@gmail.com>"]
+license = "MIT"
+edition = "2024"
+
+[dependencies]
+crossterm = "0.28.1"
+ratatui = "0.29.0"
+color-eyre = "0.6.3"
