@@ -1,10 +1,13 @@
-use color_eyre::Result;
+use std::{fs, path::{Path, PathBuf}};
+
+use color_eyre::{eyre::{Error, Ok}, Result};
 use ratatui::{buffer::Buffer, layout::{Alignment, Rect}, style::{Color, Style}, widgets::{block::Position, ListItem, ListState, Widget}};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout}, style::{palette::tailwind::SLATE, Modifier, Stylize}, text::Line, widgets::{Block, List, ListDirection, Paragraph}, DefaultTerminal, Frame
 };
-static SELECTED_STYLE: Style = Style::new().bg(SLATE.c900).add_modifier(Modifier::BOLD);
+use rfd::FileDialog;
+static SELECTED_STYLE: Style = Style::new().bg(SLATE.c500).add_modifier(Modifier::BOLD);
 const NORMAL_ROW_BG: Color = SLATE.c950;
 const ALT_ROW_BG_COLOR: Color = SLATE.c900;
 
@@ -15,22 +18,30 @@ fn main() -> color_eyre::Result<()> {
     ratatui::restore();
     result
 }
+
+#[derive(Debug, Default)]
+enum FileListType {
+    #[default]
+    FileListFrom,
+    FileListTo
+}
 #[derive(Debug, Default)]
 pub struct File {
     path: String,
+    extension: String,
     is_selected: bool
 }
 
 impl File {
-    fn init(path: String) -> File {
-        File {path, is_selected: false} 
+    fn init(path: String, extension: String) -> File {
+        File {path, extension, is_selected: false} 
     }
 }
 
 #[derive(Debug, Default)]
 pub struct FileList {
     items: Vec<File>,
-    state: ListState
+    state: ListState,
 }
 
 #[derive(Debug, Default)]
@@ -41,7 +52,6 @@ pub struct App {
 }
 
 impl App {
-    /// Construct a new instance of [`App`].
     pub fn new() -> Self {
         Self::default()
     }
@@ -51,11 +61,16 @@ impl App {
         self.running = true;
         self.files_from = FileList {
             items: vec![
-                File::init(String::from("From 1")),
-                File::init(String::from("From 2")),
+                File::init(String::from("From 1"), ".jpg".into()),
+                File::init(String::from("From 2"), ".jpg".into()),
+                File::init(String::from("From 3"), ".jpg".into()),
+                File::init(String::from("From 4"), ".jpg".into()),
+                File::init(String::from("From 5"), ".jpg".into()),
+                File::init(String::from("From 6"), ".jpg".into()),
             ],
             state: ListState::default(),
         };
+
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
             self.handle_crossterm_events()?;
@@ -72,12 +87,9 @@ impl App {
         let horizontal = Layout::horizontal([Fill(1); 2]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
-        // let mut state = ListState::default();
-
         frame.render_widget(Block::bordered().title("Blazingly fast moving files").title_alignment(Alignment::Center), title_area);
 
-
-        frame.render_widget(Block::bordered().title("Import to"), right_area);
+        self.render_to_list(right_area, frame);
 
         self.render_from_list(left_area, frame);
 
@@ -85,7 +97,7 @@ impl App {
     }
 
     fn render_footer(&mut self, area: Rect, frame: &mut Frame) {
-        frame.render_widget(Paragraph::new("Use ↓↑ to move, ← to unselect, → to change status, g/G to go top/bottom.")
+        frame.render_widget(Paragraph::new("Use ↓↑ to move, ␣ to select/unselect, f to open file explorer, q to QUIT")
             .centered()
             .block(Block::bordered().title("Options")), 
             area);
@@ -99,7 +111,13 @@ impl App {
             .enumerate()
             .map(|(i, file)| {
                 let color = alternate_colors(i);
-                ListItem::from(file.path.clone()).bg(color)
+                let mut item = ListItem::from(file.path.clone()).style(Style::new().bg(color));
+                if file.is_selected {
+                    item = item.style(SELECTED_STYLE);
+                } else {
+                    item = item.style(Style::new().bg(color))
+                }
+                item
             })
             .collect();
 
@@ -114,13 +132,37 @@ impl App {
 
     }
 
+    fn render_to_list(&mut self, area: Rect, frame: &mut Frame) {
+        let items: Vec<ListItem> = self
+            .files_to
+            .items
+            .iter()
+            .enumerate()
+            .map(|(i, file)| {
+                let color = alternate_colors(i);
+                let mut item = ListItem::from(file.path.clone()).style(Style::new().bg(color));
+                item = item.style(Style::new().bg(color));
+                item
+            })
+            .collect();
+
+        let files_to_list = List::new(items)
+            .block(Block::bordered().title("Import to"))
+            .style(Style::new().white());
+
+        frame.render_stateful_widget(files_to_list, area, &mut self.files_to.state);
+
+    }
+
     /// Handles the key events and updates the state of [`App`].
     fn on_key_event(&mut self, key: KeyEvent) {
-        match key.code {
-            KeyCode::Char('q')  => self.quit(),
-            KeyCode::Down => self.select_next(),
-            KeyCode::Up => self.select_previous(),
-            KeyCode::Char(' ') => self.change_status(),
+        match (key.modifiers, key.code) {
+            (_, KeyCode::Char('q'))  => self.quit(),
+            (_, KeyCode::Down) => self.select_next(),
+            (_, KeyCode::Up) => self.select_previous(),
+            (_, KeyCode::Char(' ')) => self.change_status(),
+            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListTo),
+            (_, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListFrom),
             _ => {}
         }
     }
@@ -135,7 +177,40 @@ impl App {
 
     fn change_status(&mut self) {
         if let Some(i) = self.files_from.state.selected() {
-            self.files_from.items[i].is_selected = true
+            self.files_from.items[i].is_selected = !self.files_from.items[i].is_selected;
+        }
+    }
+
+    fn load_files_via_file_explorer(&mut self, list_type: FileListType) {
+        if let Some(folder_path) = pick_folder() {
+            match fs::read_dir(folder_path) {
+                std::result::Result::Ok(entries) => { 
+                    let files : Vec<File> = entries
+                        .filter_map(Result::ok)
+                        .filter_map(|f| {
+                            let path = f.path();
+                            let path_string = path.to_string_lossy().to_string();
+                            let extension = path.extension()
+                                .and_then(|e| e.to_str())
+                                .unwrap_or("")
+                                .to_string();
+                            Some(File::init(path_string, extension))
+                        })
+                        .collect();
+
+                    match list_type {
+                        FileListType::FileListFrom => {
+                            self.files_from.items = files;
+                            self.files_from.state.select(Some(0));
+                        }
+                        FileListType::FileListTo => {
+                            self.files_to.items = files;
+                        }
+                    }
+
+                },
+                Err(e) => eprint!("Error reading dir: {}", e)
+            }
         }
     }
 
@@ -162,4 +237,10 @@ const fn alternate_colors(i: usize) -> Color {
     } else {
         ALT_ROW_BG_COLOR
     }
+}
+
+fn pick_folder() -> Option<std::path::PathBuf> {
+    FileDialog::new()
+        .set_title("Select folder")
+        .pick_folder()
 }
