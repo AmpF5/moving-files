@@ -1,6 +1,6 @@
 use std::{fs, path::{Path, PathBuf}};
 
-use color_eyre::{eyre::{Error, Ok}, Result};
+use color_eyre::{eyre::{Error, Ok}, owo_colors::OwoColorize, Result};
 use ratatui::{buffer::Buffer, layout::{Alignment, Rect}, style::{Color, Style}, widgets::{block::Position, ListItem, ListState, Widget}};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
@@ -28,13 +28,14 @@ enum FileListType {
 #[derive(Debug, Default)]
 pub struct File {
     path: String,
+    name: String,
     extension: String,
     is_selected: bool
 }
 
 impl File {
-    fn init(path: String, extension: String) -> File {
-        File {path, extension, is_selected: false} 
+    fn init(path: String, name: String, extension: String) -> File {
+        File {path, name, extension, is_selected: false} 
     }
 }
 
@@ -42,6 +43,7 @@ impl File {
 pub struct FileList {
     items: Vec<File>,
     state: ListState,
+    path: String
 }
 
 #[derive(Debug, Default)]
@@ -59,17 +61,6 @@ impl App {
     /// Run the application's main loop.
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.running = true;
-        self.files_from = FileList {
-            items: vec![
-                File::init(String::from("From 1"), ".jpg".into()),
-                File::init(String::from("From 2"), ".jpg".into()),
-                File::init(String::from("From 3"), ".jpg".into()),
-                File::init(String::from("From 4"), ".jpg".into()),
-                File::init(String::from("From 5"), ".jpg".into()),
-                File::init(String::from("From 6"), ".jpg".into()),
-            ],
-            state: ListState::default(),
-        };
 
         while self.running {
             terminal.draw(|frame| self.render(frame))?;
@@ -97,9 +88,9 @@ impl App {
     }
 
     fn render_footer(&mut self, area: Rect, frame: &mut Frame) {
-        frame.render_widget(Paragraph::new("Use ↓↑ to move, ␣ to select/unselect, f to open file explorer, q to QUIT")
+        frame.render_widget(Paragraph::new("↓↑: Navigate files | ␣: Select/Unselect file | f: Open source folder | Ctrl+f: Open destination folder | q: Quit")
             .centered()
-            .block(Block::bordered().title("Options")), 
+            .block(Block::bordered().title("Available Commands")), 
             area);
     }
 
@@ -154,7 +145,6 @@ impl App {
 
     }
 
-    /// Handles the key events and updates the state of [`App`].
     fn on_key_event(&mut self, key: KeyEvent) {
         match (key.modifiers, key.code) {
             (_, KeyCode::Char('q'))  => self.quit(),
@@ -163,6 +153,11 @@ impl App {
             (_, KeyCode::Char(' ')) => self.change_status(),
             (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListTo),
             (_, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListFrom),
+            (_, KeyCode::Enter) => {
+                if let Err(e) = self.move_files() {
+                    eprintln!("Error moving files: {}", e);
+                }
+            },
             _ => {}
         }
     }
@@ -182,7 +177,8 @@ impl App {
     }
 
     fn load_files_via_file_explorer(&mut self, list_type: FileListType) {
-        if let Some(folder_path) = pick_folder() {
+        if let Some(folder_path) = pick_folder(&list_type) {
+            let dir_path = folder_path.clone().into_os_string().into_string().unwrap();
             match fs::read_dir(folder_path) {
                 std::result::Result::Ok(entries) => { 
                     let files : Vec<File> = entries
@@ -190,21 +186,27 @@ impl App {
                         .filter_map(|f| {
                             let path = f.path();
                             let path_string = path.to_string_lossy().to_string();
+                            let name = path.file_name()
+                                .and_then(|f| f.to_str())
+                                .unwrap_or("")
+                                .to_string();
                             let extension = path.extension()
                                 .and_then(|e| e.to_str())
                                 .unwrap_or("")
                                 .to_string();
-                            Some(File::init(path_string, extension))
+                            Some(File::init(path_string, name, extension))
                         })
                         .collect();
 
                     match list_type {
                         FileListType::FileListFrom => {
                             self.files_from.items = files;
+                            self.files_from.path = dir_path;
                             self.files_from.state.select(Some(0));
                         }
                         FileListType::FileListTo => {
                             self.files_to.items = files;
+                            self.files_to.path = dir_path;
                         }
                     }
 
@@ -214,9 +216,24 @@ impl App {
         }
     }
 
+    fn move_files(&mut self) -> color_eyre::Result<()>{
+        let files_to_move: Vec<&File> = self.files_from.items
+        .iter()
+        .filter(|f| f.is_selected)
+        .collect();
+
+        for file in files_to_move.into_iter() {
+            let old_path = Path::new(&file.path);
+            let new_path_string = format!("{}/{}", self.files_to.path, file.name);
+            let new_path = Path::new(&new_path_string);
+            fs::rename(old_path, new_path)?;
+        }
+        Ok(())
+
+    }
+
     fn handle_crossterm_events(&mut self) -> Result<()> {
         match event::read()? {
-            // it's important to check KeyEventKind::Press to avoid handling key release events
             Event::Key(key) if key.kind == KeyEventKind::Press => self.on_key_event(key),
             Event::Mouse(_) => {}
             Event::Resize(_, _) => {}
@@ -239,8 +256,13 @@ const fn alternate_colors(i: usize) -> Color {
     }
 }
 
-fn pick_folder() -> Option<std::path::PathBuf> {
+fn pick_folder(list_type: &FileListType) -> Option<std::path::PathBuf> {
+    let title;
+    match list_type {
+        FileListType::FileListFrom => title = "Select folder to import files from",
+        FileListType::FileListTo => title = "Select folder to import files to"
+    }
     FileDialog::new()
-        .set_title("Select folder")
+        .set_title(title)
         .pick_folder()
 }
