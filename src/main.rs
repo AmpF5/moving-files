@@ -25,7 +25,7 @@ enum FileListType {
     FileListFrom,
     FileListTo
 }
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct File {
     path: String,
     name: String,
@@ -217,19 +217,27 @@ impl App {
     }
 
     fn move_files(&mut self) -> color_eyre::Result<()>{
-        let files_to_move: Vec<&File> = self.files_from.items
+        let files_to_move: Vec<File> = self.files_from.items
         .iter()
         .filter(|f| f.is_selected)
+        .cloned()
         .collect();
 
-        for file in files_to_move.into_iter() {
+        for file in &files_to_move {
             let old_path = Path::new(&file.path);
             let new_path_string = format!("{}/{}", self.files_to.path, file.name);
             let new_path = Path::new(&new_path_string);
             fs::rename(old_path, new_path)?;
         }
-        Ok(())
 
+        self.files_from
+            .items
+            .retain(|f| !f.is_selected);
+
+        self.files_to
+            .items
+            .extend(files_to_move);
+        Ok(())
     }
 
     fn handle_crossterm_events(&mut self) -> Result<()> {
