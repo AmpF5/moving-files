@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}};
+use std::{fmt::format, fs, path::{Path, PathBuf}};
 
 use color_eyre::{eyre::{Error, Ok}, owo_colors::OwoColorize, Result};
 use ratatui::{buffer::Buffer, layout::{Alignment, Rect}, style::{Color, Style}, widgets::{block::Position, ListItem, ListState, Widget}};
@@ -58,7 +58,6 @@ impl App {
         Self::default()
     }
 
-    /// Run the application's main loop.
     pub fn run(mut self, mut terminal: DefaultTerminal) -> Result<()> {
         self.running = true;
 
@@ -102,7 +101,7 @@ impl App {
             .enumerate()
             .map(|(i, file)| {
                 let color = alternate_colors(i);
-                let mut item = ListItem::from(file.path.clone()).style(Style::new().bg(color));
+                let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(color));
                 if file.is_selected {
                     item = item.style(SELECTED_STYLE);
                 } else {
@@ -112,8 +111,9 @@ impl App {
             })
             .collect();
 
+
         let files_from_list = List::new(items)
-            .block(Block::bordered().title("Import from"))
+            .block(Block::bordered().title(format!("Import from {}", self.files_from.path)))
             .style(Style::new().white())
             .highlight_style(Style::new().italic())
             .highlight_symbol(">>")
@@ -131,14 +131,14 @@ impl App {
             .enumerate()
             .map(|(i, file)| {
                 let color = alternate_colors(i);
-                let mut item = ListItem::from(file.path.clone()).style(Style::new().bg(color));
+                let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(color));
                 item = item.style(Style::new().bg(color));
                 item
             })
             .collect();
 
         let files_to_list = List::new(items)
-            .block(Block::bordered().title("Import to"))
+            .block(Block::bordered().title(format!("Import to {}", &self.files_to.path)))
             .style(Style::new().white());
 
         frame.render_stateful_widget(files_to_list, area, &mut self.files_to.state);
@@ -218,10 +218,10 @@ impl App {
 
     fn move_files(&mut self) -> color_eyre::Result<()>{
         let files_to_move: Vec<File> = self.files_from.items
-        .iter()
-        .filter(|f| f.is_selected)
-        .cloned()
-        .collect();
+            .iter()
+            .filter(|f| f.is_selected)
+            .cloned()
+            .collect();
 
         for file in &files_to_move {
             let old_path = Path::new(&file.path);
