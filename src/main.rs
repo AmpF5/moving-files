@@ -1,15 +1,44 @@
 use std::{fmt::format, fs, path::{Path, PathBuf}};
 
 use color_eyre::{eyre::{Error, Ok}, owo_colors::OwoColorize, Result};
-use ratatui::{buffer::Buffer, layout::{Alignment, Flex, Rect}, style::{Color, Style}, widgets::{block::Position, Clear, ListItem, ListState, Widget, Wrap}};
+use ratatui::{buffer::Buffer, layout::{Alignment, Flex, Rect}, style::{Color, Style}, text::Span, widgets::{block::Position, Clear, ListItem, ListState, Widget, Wrap}};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout}, style::{palette::tailwind::SLATE, Modifier, Stylize}, text::Line, widgets::{Block, List, ListDirection, Paragraph}, DefaultTerminal, Frame
 };
 use rfd::FileDialog;
 static SELECTED_STYLE: Style = Style::new().bg(SLATE.c500).add_modifier(Modifier::BOLD);
+
 const NORMAL_ROW_BG: Color = SLATE.c950;
 const ALT_ROW_BG_COLOR: Color = SLATE.c900;
+
+enum FileExtension {
+    Webp,
+    Png,
+    Jpg,
+    Txt,
+    NotImplemented
+}
+
+fn get_extension_color(file_extension: FileExtension) -> Color {
+    match file_extension {
+        FileExtension::Jpg => Color::Rgb(0, 204, 255),
+        FileExtension::Webp => Color::Rgb(255, 255, 153),
+        FileExtension::Png => Color::Rgb(204, 153, 255),
+        FileExtension::Txt => Color::Rgb(255, 204, 153),
+        FileExtension::NotImplemented => Color::Rgb(255, 255, 255)
+    }
+}
+
+fn match_file_extension(file_extension: &str) -> FileExtension {
+    match file_extension {
+        "webp" => FileExtension::Webp,
+        "png" => FileExtension::Png,
+        "jpg" => FileExtension::Jpg,
+        "txt" => FileExtension::Txt,
+        _ => FileExtension::NotImplemented
+    }
+}
 
 fn main() -> color_eyre::Result<()> {
     color_eyre::install()?;
@@ -86,14 +115,13 @@ impl App {
 
         self.render_footer(status_area, frame);
         
-        // Show confirmation popup if enabled
         if self.show_popup {
             self.render_popup(frame);
         }
     }
 
     fn render_footer(&mut self, area: Rect, frame: &mut Frame) {
-        frame.render_widget(Paragraph::new("↓↑: Navigate files | ␣: Select/Unselect file | f: Open source folder | Ctrl+f: Open destination folder | q: Quit")
+        frame.render_widget(Paragraph::new("[↓↑]: Navigate files | [␣]: Select/Unselect file | [f]: Open source folder | [Ctrl+f]: Open destination folder | [q]: Quit")
             .centered()
             .block(Block::bordered().title("Available Commands")), 
             area);
@@ -106,13 +134,17 @@ impl App {
             .iter()
             .enumerate()
             .map(|(i, file)| {
-                let color = alternate_colors(i);
-                let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(color));
-                if file.is_selected {
-                    item = item.style(SELECTED_STYLE);
-                } else {
-                    item = item.style(Style::new().bg(color))
-                }
+                let bg_color = alternate_colors(i);
+                let fg_color = get_extension_color(match_file_extension(file.extension.as_str()));
+                let styled_file = Line::from(vec![
+                    Span::styled(file.name.clone(), Style::new().bg(bg_color)),
+                    Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color).bg(bg_color))
+                ]);
+                // Line::
+                // let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(bg_color));
+                // item = item.style(Style::new().bg(bg_color));
+                // item
+                let item = ListItem::from(styled_file);
                 item
             })
             .collect();
@@ -136,9 +168,17 @@ impl App {
             .iter()
             .enumerate()
             .map(|(i, file)| {
-                let color = alternate_colors(i);
-                let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(color));
-                item = item.style(Style::new().bg(color));
+                let bg_color = alternate_colors(i);
+                let fg_color = get_extension_color(match_file_extension(file.extension.as_str()));
+                let styled_file = Line::from(vec![
+                    Span::styled(file.name.clone(), Style::new().bg(bg_color)),
+                    Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color).bg(bg_color))
+                ]);
+                // Line::
+                // let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(bg_color));
+                // item = item.style(Style::new().bg(bg_color));
+                // item
+                let item = ListItem::from(styled_file);
                 item
             })
             .collect();
@@ -187,7 +227,6 @@ impl App {
                 _ => {}
             }
         } else {
-            // Normal key handling
             match (key.modifiers, key.code) {
                 (_, KeyCode::Char('q'))  => self.quit(),
                 (_, KeyCode::Down) => self.select_next(),
@@ -227,15 +266,22 @@ impl App {
                         .filter_map(Result::ok)
                         .filter_map(|f| {
                             let path = f.path();
+
                             let path_string = path.to_string_lossy().to_string();
+
                             let name = path.file_name()
                                 .and_then(|f| f.to_str())
                                 .unwrap_or("")
-                                .to_string();
+                                .rsplitn(2, '.')
+                                .nth(1)
+                                .unwrap()
+                                .into();
+
                             let extension = path.extension()
                                 .and_then(|e| e.to_str())
                                 .unwrap_or("")
                                 .to_string();
+
                             Some(File::init(path_string, name, extension))
                         })
                         .collect();
