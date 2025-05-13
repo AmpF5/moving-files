@@ -7,9 +7,11 @@ use ratatui::{
     layout::{Constraint, Layout}, style::{palette::tailwind::SLATE, Modifier, Stylize}, text::Line, widgets::{Block, List, ListDirection, Paragraph}, DefaultTerminal, Frame
 };
 use rfd::FileDialog;
+
 static SELECTED_STYLE: Style = Style::new().bg(SLATE.c500).add_modifier(Modifier::BOLD);
 
-const NORMAL_ROW_BG: Color = SLATE.c950;
+const SELECTED_ROW_BG_COLOR: Color = SLATE.c500;
+const NORMAL_ROW_BG_COLOR: Color = SLATE.c950;
 const ALT_ROW_BG_COLOR: Color = SLATE.c900;
 
 enum FileExtension {
@@ -135,16 +137,20 @@ impl App {
             .enumerate()
             .map(|(i, file)| {
                 let bg_color = alternate_colors(i);
+
                 let fg_color = get_extension_color(match_file_extension(file.extension.as_str()));
-                let styled_file = Line::from(vec![
-                    Span::styled(file.name.clone(), Style::new().bg(bg_color)),
-                    Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color).bg(bg_color))
-                ]);
-                // Line::
-                // let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(bg_color));
-                // item = item.style(Style::new().bg(bg_color));
-                // item
+
+                let mut styled_file = Line::from(vec![
+                    Span::styled(file.name.clone(), Style::default()),
+                    Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color))
+                ]).bg(bg_color);
+                
+                if file.is_selected {
+                    styled_file = styled_file.clone().style(Style::new().bg(SELECTED_ROW_BG_COLOR).add_modifier(Modifier::BOLD));
+                }
+
                 let item = ListItem::from(styled_file);
+
                 item
             })
             .collect();
@@ -169,16 +175,16 @@ impl App {
             .enumerate()
             .map(|(i, file)| {
                 let bg_color = alternate_colors(i);
+
                 let fg_color = get_extension_color(match_file_extension(file.extension.as_str()));
+
                 let styled_file = Line::from(vec![
                     Span::styled(file.name.clone(), Style::new().bg(bg_color)),
                     Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color).bg(bg_color))
                 ]);
-                // Line::
-                // let mut item = ListItem::from(file.name.clone()).style(Style::new().bg(bg_color));
-                // item = item.style(Style::new().bg(bg_color));
-                // item
+
                 let item = ListItem::from(styled_file);
+
                 item
             })
             .collect();
@@ -235,7 +241,6 @@ impl App {
                 (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListTo),
                 (_, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListFrom),
                 (_, KeyCode::Enter) => {
-                    // Show confirmation popup
                     self.show_popup = true;
                 },
                 _ => {}
@@ -269,20 +274,22 @@ impl App {
 
                             let path_string = path.to_string_lossy().to_string();
 
-                            let name = path.file_name()
+                            let file_name = path
+                                .file_name()
                                 .and_then(|f| f.to_str())
-                                .unwrap_or("")
+                                ?;
+
+                            let name: &str = file_name
                                 .rsplitn(2, '.')
                                 .nth(1)
-                                .unwrap()
-                                .into();
+                                ?;
 
-                            let extension = path.extension()
-                                .and_then(|e| e.to_str())
-                                .unwrap_or("")
-                                .to_string();
+                            let extension: String = path
+                                .extension()
+                                .and_then(|s| s.to_str())
+                                ?.to_string();  
 
-                            Some(File::init(path_string, name, extension))
+                            Some(File::init(path_string, name.into(), extension))
                         })
                         .collect();
 
@@ -346,7 +353,7 @@ impl App {
 
 const fn alternate_colors(i: usize) -> Color {
     if i % 2 == 0 {
-        NORMAL_ROW_BG
+        NORMAL_ROW_BG_COLOR
     } else {
         ALT_ROW_BG_COLOR
     }
