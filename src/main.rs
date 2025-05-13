@@ -1,7 +1,7 @@
 use std::{fmt::format, fs, path::{Path, PathBuf}};
 
 use color_eyre::{eyre::{Error, Ok}, owo_colors::OwoColorize, Result};
-use ratatui::{buffer::Buffer, layout::{Alignment, Rect}, style::{Color, Style}, widgets::{block::Position, ListItem, ListState, Widget}};
+use ratatui::{buffer::Buffer, layout::{Alignment, Flex, Rect}, style::{Color, Style}, widgets::{block::Position, Clear, ListItem, ListState, Widget, Wrap}};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Layout}, style::{palette::tailwind::SLATE, Modifier, Stylize}, text::Line, widgets::{Block, List, ListDirection, Paragraph}, DefaultTerminal, Frame
@@ -50,7 +50,8 @@ pub struct FileList {
 pub struct App {
     running: bool,
     files_from: FileList,
-    files_to: FileList
+    files_to: FileList,
+    show_popup: bool
 }
 
 impl App {
@@ -84,6 +85,11 @@ impl App {
         self.render_from_list(left_area, frame);
 
         self.render_footer(status_area, frame);
+        
+        // Show confirmation popup if enabled
+        if self.show_popup {
+            self.render_popup(frame);
+        }
     }
 
     fn render_footer(&mut self, area: Rect, frame: &mut Frame) {
@@ -145,20 +151,56 @@ impl App {
 
     }
 
+    fn render_popup(&mut self, frame: &mut Frame) {
+        let area = center(
+            frame.area(),
+            Constraint::Percentage(50),
+            Constraint::Length(6)
+        );
+        let selected_count = self.files_from.items.iter().filter(|f| f.is_selected).count();
+        let msg = format!(
+            "Are you sure you want to move {} selected file(s)?\nDestination: {} \n\nPress (Y)es to confirm or (N)o/(Esc) to cancel", 
+            selected_count,
+            &self.files_to.path
+        );
+        let popup = Paragraph::new(msg)
+            .wrap(Wrap { trim: true })
+            .alignment(Alignment::Center)
+            .block(Block::bordered().title("Confirm action"));
+
+        frame.render_widget(Clear, area);
+        frame.render_widget(popup, area);
+    }
+
     fn on_key_event(&mut self, key: KeyEvent) {
-        match (key.modifiers, key.code) {
-            (_, KeyCode::Char('q'))  => self.quit(),
-            (_, KeyCode::Down) => self.select_next(),
-            (_, KeyCode::Up) => self.select_previous(),
-            (_, KeyCode::Char(' ')) => self.change_status(),
-            (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListTo),
-            (_, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListFrom),
-            (_, KeyCode::Enter) => {
-                if let Err(e) = self.move_files() {
-                    eprintln!("Error moving files: {}", e);
+        if self.show_popup {
+            match key.code {
+                KeyCode::Char('y') | KeyCode::Char('Y') => {
+                    self.show_popup = false;
+                    if let Err(e) = self.move_files() {
+                        eprintln!("Error moving files: {}", e);
+                    }
                 }
-            },
-            _ => {}
+                KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                    self.show_popup = false;
+                }
+                _ => {}
+            }
+        } else {
+            // Normal key handling
+            match (key.modifiers, key.code) {
+                (_, KeyCode::Char('q'))  => self.quit(),
+                (_, KeyCode::Down) => self.select_next(),
+                (_, KeyCode::Up) => self.select_previous(),
+                (_, KeyCode::Char(' ')) => self.change_status(),
+                (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListTo),
+                (_, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListFrom),
+                (_, KeyCode::Enter) => {
+                    // Show confirmation popup
+                    self.show_popup = true;
+                },
+                _ => {}
+            }
         }
     }
 
@@ -273,4 +315,12 @@ fn pick_folder(list_type: &FileListType) -> Option<std::path::PathBuf> {
     FileDialog::new()
         .set_title(title)
         .pick_folder()
+}
+
+fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+    let [area] = Layout::horizontal([horizontal])
+        .flex(Flex::Center)
+        .areas(area);
+    let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+    area
 }
