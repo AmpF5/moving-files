@@ -142,7 +142,7 @@ impl App {
     }
 
     fn render_footer(&mut self, area: Rect, frame: &mut Frame) {
-        frame.render_widget(Paragraph::new("[↓↑]: Navigate files | [␣]: Select/Unselect file | [f]: Open source folder | [Ctrl+f]: Open destination folder | [q]: Quit")
+        frame.render_widget(Paragraph::new("[↓↑]: Navigate files | [␣]: Select/Unselect file | [f]: Open source folder | [Ctrl+f]: Open destination folder | [s] Swap folders | [q]: Quit")
             .centered()
             .block(Block::bordered().title("Available Commands")), 
             area);
@@ -264,6 +264,7 @@ impl App {
                 (_, KeyCode::Down) => self.select_next(),
                 (_, KeyCode::Up) => self.select_previous(),
                 (_, KeyCode::Char(' ')) => self.change_status(),
+                (_, KeyCode::Char('s')) => self.swap_file_lists(),
                 (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
                     self.load_files_via_file_explorer(FileListType::FileListTo)
                 }
@@ -330,6 +331,10 @@ impl App {
                 Err(e) => eprint!("Error reading dir: {}", e),
             }
         }
+    }
+
+    fn swap_file_lists(&mut self) {
+        std::mem::swap(&mut self.files_from, &mut self.files_to);
     }
 
     fn move_files(&mut self) -> color_eyre::Result<()> {
