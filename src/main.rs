@@ -1,10 +1,28 @@
-use std::{fmt::format, fs, path::{Path, PathBuf}};
+use std::{
+    fmt::format,
+    fs,
+    path::{Path, PathBuf},
+};
 
-use color_eyre::{eyre::{Error, Ok}, owo_colors::OwoColorize, Result};
-use ratatui::{buffer::Buffer, layout::{Alignment, Flex, Rect}, style::{Color, Style}, text::Span, widgets::{block::Position, Clear, ListItem, ListState, Widget, Wrap}};
+use color_eyre::{
+    Result,
+    eyre::{Error, Ok},
+    owo_colors::OwoColorize,
+};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
-    layout::{Constraint, Layout}, style::{palette::tailwind::SLATE, Modifier, Stylize}, text::Line, widgets::{Block, List, ListDirection, Paragraph}, DefaultTerminal, Frame
+    DefaultTerminal, Frame,
+    layout::{Constraint, Layout},
+    style::{Modifier, Stylize, palette::tailwind::SLATE},
+    text::Line,
+    widgets::{Block, List, ListDirection, Paragraph},
+};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Alignment, Flex, Rect},
+    style::{Color, Style},
+    text::Span,
+    widgets::{Clear, ListItem, ListState, Widget, Wrap, block::Position},
 };
 use rfd::FileDialog;
 
@@ -19,7 +37,7 @@ enum FileExtension {
     Png,
     Jpg,
     Txt,
-    NotImplemented
+    NotImplemented,
 }
 
 fn get_extension_color(file_extension: FileExtension) -> Color {
@@ -28,7 +46,7 @@ fn get_extension_color(file_extension: FileExtension) -> Color {
         FileExtension::Webp => Color::Rgb(255, 255, 153),
         FileExtension::Png => Color::Rgb(204, 153, 255),
         FileExtension::Txt => Color::Rgb(255, 204, 153),
-        FileExtension::NotImplemented => Color::Rgb(255, 255, 255)
+        FileExtension::NotImplemented => Color::Rgb(255, 255, 255),
     }
 }
 
@@ -38,7 +56,7 @@ fn match_file_extension(file_extension: &str) -> FileExtension {
         "png" => FileExtension::Png,
         "jpg" => FileExtension::Jpg,
         "txt" => FileExtension::Txt,
-        _ => FileExtension::NotImplemented
+        _ => FileExtension::NotImplemented,
     }
 }
 
@@ -54,19 +72,24 @@ fn main() -> color_eyre::Result<()> {
 enum FileListType {
     #[default]
     FileListFrom,
-    FileListTo
+    FileListTo,
 }
 #[derive(Debug, Default, Clone)]
 pub struct File {
     path: String,
     name: String,
     extension: String,
-    is_selected: bool
+    is_selected: bool,
 }
 
 impl File {
     fn init(path: String, name: String, extension: String) -> File {
-        File {path, name, extension, is_selected: false} 
+        File {
+            path,
+            name,
+            extension,
+            is_selected: false,
+        }
     }
 }
 
@@ -74,7 +97,7 @@ impl File {
 pub struct FileList {
     items: Vec<File>,
     state: ListState,
-    path: String
+    path: String,
 }
 
 #[derive(Debug, Default)]
@@ -82,7 +105,7 @@ pub struct App {
     running: bool,
     files_from: FileList,
     files_to: FileList,
-    show_popup: bool
+    show_popup: bool,
 }
 
 impl App {
@@ -109,14 +132,19 @@ impl App {
         let horizontal = Layout::horizontal([Fill(1); 2]);
         let [left_area, right_area] = horizontal.areas(main_area);
 
-        frame.render_widget(Block::bordered().title("Blazingly fast moving files").title_alignment(Alignment::Center), title_area);
+        frame.render_widget(
+            Block::bordered()
+                .title("Blazingly fast moving files")
+                .title_alignment(Alignment::Center),
+            title_area,
+        );
 
         self.render_to_list(right_area, frame);
 
         self.render_from_list(left_area, frame);
 
         self.render_footer(status_area, frame);
-        
+
         if self.show_popup {
             self.render_popup(frame);
         }
@@ -142,11 +170,19 @@ impl App {
 
                 let mut styled_file = Line::from(vec![
                     Span::styled(file.name.clone(), Style::default()),
-                    Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color))
-                ]).bg(bg_color);
-                
+                    Span::styled(
+                        format!(".{}", file.extension.clone()),
+                        Style::new().fg(fg_color),
+                    ),
+                ])
+                .bg(bg_color);
+
                 if file.is_selected {
-                    styled_file = styled_file.clone().style(Style::new().bg(SELECTED_ROW_BG_COLOR).add_modifier(Modifier::BOLD));
+                    styled_file = styled_file.clone().style(
+                        Style::new()
+                            .bg(SELECTED_ROW_BG_COLOR)
+                            .add_modifier(Modifier::BOLD),
+                    );
                 }
 
                 let item = ListItem::from(styled_file);
@@ -154,7 +190,6 @@ impl App {
                 item
             })
             .collect();
-
 
         let files_from_list = List::new(items)
             .block(Block::bordered().title(format!("Import from {}", self.files_from.path)))
@@ -164,7 +199,6 @@ impl App {
             .repeat_highlight_symbol(true);
 
         frame.render_stateful_widget(files_from_list, area, &mut self.files_from.state);
-
     }
 
     fn render_to_list(&mut self, area: Rect, frame: &mut Frame) {
@@ -180,7 +214,10 @@ impl App {
 
                 let styled_file = Line::from(vec![
                     Span::styled(file.name.clone(), Style::new().bg(bg_color)),
-                    Span::styled(format!(".{}", file.extension.clone()), Style::new().fg(fg_color).bg(bg_color))
+                    Span::styled(
+                        format!(".{}", file.extension.clone()),
+                        Style::new().fg(fg_color).bg(bg_color),
+                    ),
                 ]);
 
                 let item = ListItem::from(styled_file);
@@ -194,20 +231,23 @@ impl App {
             .style(Style::new().white());
 
         frame.render_stateful_widget(files_to_list, area, &mut self.files_to.state);
-
     }
 
     fn render_popup(&mut self, frame: &mut Frame) {
         let area = center(
             frame.area(),
             Constraint::Percentage(50),
-            Constraint::Length(6)
+            Constraint::Length(6),
         );
-        let selected_count = self.files_from.items.iter().filter(|f| f.is_selected).count();
+        let selected_count = self
+            .files_from
+            .items
+            .iter()
+            .filter(|f| f.is_selected)
+            .count();
         let msg = format!(
-            "Are you sure you want to move {} selected file(s)?\nDestination: {} \n\nPress (Y)es to confirm or (N)o/(Esc) to cancel", 
-            selected_count,
-            &self.files_to.path
+            "Are you sure you want to move {} selected file(s)?\nDestination: {} \n\nPress (Y)es to confirm or (N)o/(Esc) to cancel",
+            selected_count, &self.files_to.path
         );
         let popup = Paragraph::new(msg)
             .wrap(Wrap { trim: true })
@@ -234,15 +274,19 @@ impl App {
             }
         } else {
             match (key.modifiers, key.code) {
-                (_, KeyCode::Char('q'))  => self.quit(),
+                (_, KeyCode::Char('q')) => self.quit(),
                 (_, KeyCode::Down) => self.select_next(),
                 (_, KeyCode::Up) => self.select_previous(),
                 (_, KeyCode::Char(' ')) => self.change_status(),
-                (KeyModifiers::CONTROL, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListTo),
-                (_, KeyCode::Char('f')) => self.load_files_via_file_explorer(FileListType::FileListFrom),
+                (KeyModifiers::CONTROL, KeyCode::Char('f')) => {
+                    self.load_files_via_file_explorer(FileListType::FileListTo)
+                }
+                (_, KeyCode::Char('f')) => {
+                    self.load_files_via_file_explorer(FileListType::FileListFrom)
+                }
                 (_, KeyCode::Enter) => {
                     self.show_popup = true;
-                },
+                }
                 _ => {}
             }
         }
@@ -266,28 +310,20 @@ impl App {
         if let Some(folder_path) = pick_folder(&list_type) {
             let dir_path = folder_path.clone().into_os_string().into_string().unwrap();
             match fs::read_dir(folder_path) {
-                std::result::Result::Ok(entries) => { 
-                    let files : Vec<File> = entries
+                std::result::Result::Ok(entries) => {
+                    let files: Vec<File> = entries
                         .filter_map(Result::ok)
                         .filter_map(|f| {
                             let path = f.path();
 
                             let path_string = path.to_string_lossy().to_string();
 
-                            let file_name = path
-                                .file_name()
-                                .and_then(|f| f.to_str())
-                                ?;
+                            let file_name = path.file_name().and_then(|f| f.to_str())?;
 
-                            let name: &str = file_name
-                                .rsplitn(2, '.')
-                                .nth(1)
-                                ?;
+                            let name: &str = file_name.rsplitn(2, '.').nth(1)?;
 
-                            let extension: String = path
-                                .extension()
-                                .and_then(|s| s.to_str())
-                                ?.to_string();  
+                            let extension: String =
+                                path.extension().and_then(|s| s.to_str())?.to_string();
 
                             Some(File::init(path_string, name.into(), extension))
                         })
@@ -304,15 +340,16 @@ impl App {
                             self.files_to.path = dir_path;
                         }
                     }
-
-                },
-                Err(e) => eprint!("Error reading dir: {}", e)
+                }
+                Err(e) => eprint!("Error reading dir: {}", e),
             }
         }
     }
 
-    fn move_files(&mut self) -> color_eyre::Result<()>{
-        let files_to_move: Vec<File> = self.files_from.items
+    fn move_files(&mut self) -> color_eyre::Result<()> {
+        let files_to_move: Vec<File> = self
+            .files_from
+            .items
             .iter()
             .filter(|f| f.is_selected)
             .cloned()
@@ -325,13 +362,9 @@ impl App {
             fs::rename(old_path, new_path)?;
         }
 
-        self.files_from
-            .items
-            .retain(|f| !f.is_selected);
+        self.files_from.items.retain(|f| !f.is_selected);
 
-        self.files_to
-            .items
-            .extend(files_to_move);
+        self.files_to.items.extend(files_to_move);
         Ok(())
     }
 
@@ -348,7 +381,6 @@ impl App {
     fn quit(&mut self) {
         self.running = false;
     }
-    
 }
 
 const fn alternate_colors(i: usize) -> Color {
@@ -363,11 +395,9 @@ fn pick_folder(list_type: &FileListType) -> Option<std::path::PathBuf> {
     let title;
     match list_type {
         FileListType::FileListFrom => title = "Select folder to import files from",
-        FileListType::FileListTo => title = "Select folder to import files to"
+        FileListType::FileListTo => title = "Select folder to import files to",
     }
-    FileDialog::new()
-        .set_title(title)
-        .pick_folder()
+    FileDialog::new().set_title(title).pick_folder()
 }
 
 fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
