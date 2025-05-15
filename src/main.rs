@@ -1,32 +1,23 @@
-use std::{
-    fmt::format,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::{fs, path::Path};
 
-use color_eyre::{
-    Result,
-    eyre::{Error, Ok},
-    owo_colors::OwoColorize,
-};
+use color_eyre::{Result, eyre::Ok};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Constraint, Layout},
     style::{Modifier, Stylize, palette::tailwind::SLATE},
     text::Line,
-    widgets::{Block, List, ListDirection, Paragraph},
+    widgets::{Block, List, Paragraph},
 };
 use ratatui::{
-    buffer::Buffer,
     layout::{Alignment, Flex, Rect},
     style::{Color, Style},
     text::Span,
-    widgets::{Clear, ListItem, ListState, Widget, Wrap, block::Position},
+    widgets::{Clear, ListItem, ListState, Wrap},
 };
 use rfd::FileDialog;
 
-static SELECTED_STYLE: Style = Style::new().bg(SLATE.c500).add_modifier(Modifier::BOLD);
+// static SELECTED_STYLE: Style = Style::new().bg(SLATE.c500).add_modifier(Modifier::BOLD);
 
 const SELECTED_ROW_BG_COLOR: Color = SLATE.c500;
 const NORMAL_ROW_BG_COLOR: Color = SLATE.c950;
@@ -184,10 +175,7 @@ impl App {
                             .add_modifier(Modifier::BOLD),
                     );
                 }
-
-                let item = ListItem::from(styled_file);
-
-                item
+                ListItem::from(styled_file)
             })
             .collect();
 
@@ -220,9 +208,7 @@ impl App {
                     ),
                 ]);
 
-                let item = ListItem::from(styled_file);
-
-                item
+                ListItem::from(styled_file)
             })
             .collect();
 
@@ -246,7 +232,7 @@ impl App {
             .filter(|f| f.is_selected)
             .count();
         let msg = format!(
-            "Are you sure you want to move {} selected file(s)?\nDestination: {} \n\nPress (Y)es to confirm or (N)o/(Esc) to cancel",
+            "Are you sure you want to move {} file(s)?\nDestination: {} \n\nPress (Y)es to confirm or (N)o/(Esc) to cancel",
             selected_count, &self.files_to.path
         );
         let popup = Paragraph::new(msg)
@@ -320,7 +306,7 @@ impl App {
 
                             let file_name = path.file_name().and_then(|f| f.to_str())?;
 
-                            let name: &str = file_name.rsplitn(2, '.').nth(1)?;
+                            let name: &str = file_name.rsplit_once('.')?.0;
 
                             let extension: String =
                                 path.extension().and_then(|s| s.to_str())?.to_string();
@@ -357,7 +343,8 @@ impl App {
 
         for file in &files_to_move {
             let old_path = Path::new(&file.path);
-            let new_path_string = format!("{}/{}", self.files_to.path, file.name);
+            let new_path_string =
+                format!("{}/{}.{}", self.files_to.path, file.name, file.extension);
             let new_path = Path::new(&new_path_string);
             fs::rename(old_path, new_path)?;
         }
@@ -392,11 +379,10 @@ const fn alternate_colors(i: usize) -> Color {
 }
 
 fn pick_folder(list_type: &FileListType) -> Option<std::path::PathBuf> {
-    let title;
-    match list_type {
-        FileListType::FileListFrom => title = "Select folder to import files from",
-        FileListType::FileListTo => title = "Select folder to import files to",
-    }
+    let title = match list_type {
+        FileListType::FileListFrom => "Select folder to import files from",
+        FileListType::FileListTo => "Select folder to import files to",
+    };
     FileDialog::new().set_title(title).pick_folder()
 }
 
