@@ -201,12 +201,13 @@ impl App {
                 let fg_color = get_extension_color(match_file_extension(file.extension.as_str()));
 
                 let styled_file = Line::from(vec![
-                    Span::styled(file.name.clone(), Style::new().bg(bg_color)),
+                    Span::styled(file.name.clone(), Style::default()),
                     Span::styled(
                         format!(".{}", file.extension.clone()),
-                        Style::new().fg(fg_color).bg(bg_color),
+                        Style::new().fg(fg_color),
                     ),
-                ]);
+                ])
+                .bg(bg_color);
 
                 ListItem::from(styled_file)
             })
@@ -335,6 +336,10 @@ impl App {
 
     fn swap_file_lists(&mut self) {
         std::mem::swap(&mut self.files_from, &mut self.files_to);
+        self.files_from
+            .items
+            .iter_mut()
+            .for_each(|f| f.is_selected = false)
     }
 
     fn move_files(&mut self) -> color_eyre::Result<()> {
