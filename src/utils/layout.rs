@@ -1,6 +1,6 @@
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 
-fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+pub fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
     let [area] = Layout::horizontal([horizontal])
         .flex(Flex::Center)
         .areas(area);

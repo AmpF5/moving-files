@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, List, ListItem, Paragraph},
 };
 
-use crate::{app::App, utils::fs::match_file_extension};
+use crate::{app::App, ui::popup::render_popup, utils::fs::match_file_extension};
 
 use super::style::{SELECTED_ROW_BG_COLOR, alternate_colors, get_extension_color};
 
@@ -27,9 +27,9 @@ pub fn render_main_windows(app: &mut App, frame: &mut Frame) {
 
     render_footer(status_area, frame);
 
-    // if self.show_popup {
-    //     self.render_popup(frame);
-    // }
+    if app.show_popup {
+        render_popup(app, frame);
+    }
 }
 
 fn render_footer(area: Rect, frame: &mut Frame) {
