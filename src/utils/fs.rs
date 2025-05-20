@@ -30,7 +30,7 @@ pub fn pick_folder(list_type: &FileListType) -> Option<std::path::PathBuf> {
 }
 
 pub fn move_selected_files(app: &mut App) -> color_eyre::Result<()> {
-    let files_to_move: Vec<File> = app
+    let mut files_to_move: Vec<File> = app
         .files_from
         .items
         .iter()
@@ -38,11 +38,12 @@ pub fn move_selected_files(app: &mut App) -> color_eyre::Result<()> {
         .cloned()
         .collect();
 
-    for file in &files_to_move {
+    for file in &mut files_to_move {
         let old_path = Path::new(&file.path);
         let new_path_string = format!("{}/{}.{}", app.files_to.path, file.name, file.extension);
         let new_path = Path::new(&new_path_string);
         fs::rename(old_path, new_path)?;
+        file.path = new_path_string;
     }
 
     app.files_from.items.retain(|f| !f.is_selected);
